@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expense Splitter</title>
+<meta name="description" content="Split group expenses and minimize the number of settlement transactions.">
+<style>
+:root{
+  --bg:#f6f7f4; --card:#ffffff; --ink:#1c2321; --muted:#5f6b66; --line:#e1e5e0;
+  --accent:#1f7a5c; --accent-ink:#ffffff; --accent-soft:#e3f2ec;
+  --warn:#b4432f; --warn-soft:#fbeae6; --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#121715; --card:#1b2220; --ink:#e8eeeb; --muted:#9aa8a2; --line:#2a3430;
+    --accent:#3fb88c; --accent-ink:#06231a; --accent-soft:#1c3329; --warn:#f08a74; --warn-soft:#3a211c; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:28px 16px 8px;max-width:1000px;margin:0 auto}
+h1{margin:0;font-size:1.9rem;letter-spacing:-.02em}
+header p{margin:4px 0 0;color:var(--muted)}
+main{max-width:1000px;margin:0 auto;padding:12px 16px 48px;display:grid;gap:16px;grid-template-columns:1fr 1fr}
+@media(max-width:800px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+section.wide{grid-column:1/-1}
+h2{margin:0 0 12px;font-size:1.05rem}
+label{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
+input,select,button{font:inherit;color:inherit}
+input[type=text],input[type=number],select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);padding:9px 14px;border-radius:10px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.ghost{background:transparent}
+button.danger{color:var(--warn)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>input{flex:1;min-width:120px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);padding:4px 6px 4px 12px;border-radius:99px;font-size:.9rem}
+.chip button{border:0;background:transparent;padding:0 6px;line-height:1;color:var(--muted)}
+.checks{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px}
+.checks label{display:flex;align-items:center;gap:6px;margin:0;color:var(--ink);font-size:.95rem}
+.exact{display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center;margin-top:6px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+table{width:100%;border-collapse:collapse;font-size:.93rem}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.pos{color:var(--accent);font-weight:600}.neg{color:var(--warn);font-weight:600}
+.empty{color:var(--muted);font-style:italic;padding:6px 0}
+.settle{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.settle li{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--accent-soft);border-radius:10px;flex-wrap:wrap}
+.settle .amt{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.stat{flex:1;min-width:130px;border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.stat b{display:block;font-size:1.5rem}.stat span{font-size:.8rem;color:var(--muted)}
+.err{color:var(--warn);background:var(--warn-soft);padding:8px 10px;border-radius:10px;margin-top:10px;font-size:.9rem}
+details summary{cursor:pointer;font-weight:600}
+details p,details li{color:var(--muted);font-size:.93rem}
+code{background:var(--bg);padding:1px 5px;border-radius:5px;font-size:.88em}
+footer{max-width:1000px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>Expense Splitter</h1>
+  <p>Add friends, log shared expenses, and settle up with the <em>fewest possible payments</em>.</p>
+</header>
+
+<main>
+  <section>
+    <h2>1. People</h2>
+    <div class="row">
+      <input type="text" id="personName" placeholder="Name (e.g. Asha)" maxlength="30" aria-label="Person name">
+      <button class="primary" id="addPerson">Add</button>
+    </div>
+    <div class="chips" id="peopleList"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="ghost" id="loadDemo">Load demo trip</button>
+      <button class="ghost danger" id="resetAll">Reset all</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Add expense</h2>
+    <label for="desc">Description</label>
+    <input type="text" id="desc" placeholder="Dinner, cab, tickets…" maxlength="60">
+    <label for="amount">Amount</label>
+    <input type="number" id="amount" min="0" step="0.01" placeholder="0.00" inputmode="decimal">
+    <label for="payer">Paid by</label>
+    <select id="payer"></select>
+    <label>Split</label>
+    <div class="seg" role="group" aria-label="Split type">
+      <button type="button" id="modeEqual" class="on">Equally</button>
+      <button type="button" id="modeExact">Exact amounts</button>
+    </div>
+    <div id="splitEqual"><label>Split between</label><div class="checks" id="shareChecks"></div></div>
+    <div id="splitExact" hidden><label>Each person's share</label><div class="exact" id="exactInputs"></div></div>
+    <div id="formErr" class="err" hidden></div>
+    <div class="row" style="margin-top:14px"><button class="primary" id="addExpense">Add expense</button></div>
+  </section>
+
+  <section class="wide">
+    <h2>3. Expenses</h2>
+    <div id="expenseList"></div>
+  </section>
+
+  <section>
+    <h2>4. Balances</h2>
+    <div id="balances"></div>
+  </section>
+
+  <section>
+    <h2>5. Settle up</h2>
+    <div class="stats" id="stats"></div>
+    <ul class="settle" id="settleList"></ul>
+  </section>
+
+  <section class="wide">
+    <details>
+      <summary>How the debt-minimization algorithm works</summary>
+      <ol>
+        <li>For each person compute <code>net = total paid − total share owed</code> (in integer paise/cents, so no floating-point drift).</li>
+        <li>Positive net → <strong>creditor</strong> (is owed money). Negative net → <strong>debtor</strong>. Net values always sum to 0.</li>
+        <li>Repeatedly take the biggest debtor and biggest creditor. The debtor pays <code>min(|debt|, credit)</code> to the creditor. At least one of them becomes fully settled each step.</li>
+        <li>Stop when everyone is at 0. With <em>n</em> people this needs at most <em>n − 1</em> payments, versus up to <em>n(n − 1)/2</em> pairwise debts if each expense were repaid separately.</li>
+      </ol>
+      <p>Finding the true minimum is NP-hard (it reduces to partitioning into zero-sum subsets). The greedy approach runs in O(n log n) and is exact in most real-world cases.</p>
+    </details>
+  </section>
+</main>
+<footer>Data is saved only in your browser (localStorage). No server, no tracking.</footer>
+
+<script>
+/* ============ Core logic (pure functions, no DOM) ============ */
+
+/** Convert a decimal string/number to integer minor units (paise/cents). */
+function toMinor(v){ return Math.round(parseFloat(v) * 100); }
+function fmt(minor){ return (minor/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+/** Split `total` (minor units) equally among ids; leftover paise go to the first few people. */
+function splitEqually(total, ids){
+  const base = Math.floor(total / ids.length), rem = total - base * ids.length;
+  const out = {};
+  ids.forEach((id,i)=> out[id] = base + (i < rem ? 1 : 0));
+  return out;
+}
+
+/** net[id] = paid - owed, over all expenses. */
+function computeBalances(people, expenses){
+  const net = {};
+  people.forEach(p => net[p.id] = 0);
+  expenses.forEach(e => {
+    net[e.payer] += e.amount;
+    for (const id in e.shares) net[id] -= e.shares[id];
+  });
+  return net;
+}
+
+/** Greedy min-cash-flow: returns [{from,to,amount}] with at most n-1 entries. */
+function minimizeTransactions(net){
+  const debtors = [], creditors = [];
+  for (const id in net){
+    if (net[id] < 0) debtors.push({id, amt: -net[id]});
+    else if (net[id] > 0) creditors.push({id, amt: net[id]});
+  }
+  const result = [];
+  while (debtors.length && creditors.length){
+    debtors.sort((a,b)=>b.amt-a.amt);
+    creditors.sort((a,b)=>b.amt-a.amt);
+    const d = debtors[0], c = creditors[0];
+    const pay = Math.min(d.amt, c.amt);
+    result.push({from:d.id, to:c.id, amount:pay});
+    d.amt -= pay; c.amt -= pay;
+    if (d.amt === 0) debtors.shift();
+    if (c.amt === 0) creditors.shift();
+  }
+  return result;
+}
+
+/** Number of payments if every expense were repaid separately (baseline for comparison). */
+function naiveCount(expenses){
+  let n = 0;
+  expenses.forEach(e => { for (const id in e.shares) if (id !== e.payer && e.shares[id] > 0) n++; });
+  return n;
+}
+
+/* ============ State ============ */
+const KEY = "expense-splitter-v1";
+let state = { people: [], expenses: [] };
+let mode = "equal";
+const uid = () => Math.random().toString(36).slice(2,9);
+
+function load(){ try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.people && s.expenses) state = s; } catch(e){} }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+const $ = id => document.getElementById(id);
+const nameOf = id => (state.people.find(p=>p.id===id)||{name:"?"}).name;
+const esc = s => s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ============ Rendering ============ */
+function render(){
+  const ppl = state.people;
+  $("peopleList").innerHTML = ppl.length ? ppl.map(p =>
+    `<span class="chip">${esc(p.name)}<button title="Remove" aria-label="Remove ${esc(p.name)}" data-rm="${p.id}">×</button></span>`).join("")
+    : `<div class="empty">No one yet. Add at least two people.</div>`;
+
+  $("payer").innerHTML = ppl.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  $("shareChecks").innerHTML = ppl.map(p=>
+    `<label><input type="checkbox" value="${p.id}" checked> ${esc(p.name)}</label>`).join("");
+  $("exactInputs").innerHTML = ppl.map(p=>
+    `<span>${esc(p.name)}</span><input type="number" min="0" step="0.01" data-exact="${p.id}" placeholder="0.00">`).join("");
+
+  $("expenseList").innerHTML = state.expenses.length ? `<table><thead><tr><th>Description</th><th>Paid by</th><th>Split</th><th class="num">Amount</th><th></th></tr></thead><tbody>` +
+    state.expenses.map(e => {
+      const who = Object.keys(e.shares).filter(i=>e.shares[i]>0).map(nameOf).join(", ");
+      return `<tr><td>${esc(e.desc)}</td><td>${esc(nameOf(e.payer))}</td><td>${esc(who)}</td><td class="num">${fmt(e.amount)}</td><td class="num"><button class="ghost danger" data-del="${e.id}" aria-label="Delete expense">Delete</button></td></tr>`;
+    }).join("") + `</tbody></table>` : `<div class="empty">No expenses yet.</div>`;
+
+  const net = computeBalances(ppl, state.expenses);
+  $("balances").innerHTML = ppl.length ? `<table><thead><tr><th>Person</th><th class="num">Net balance</th></tr></thead><tbody>` +
+    ppl.map(p => { const v = net[p.id]; const cls = v>0?"pos":v<0?"neg":"";
+      const label = v>0 ? `gets back ${fmt(v)}` : v<0 ? `owes ${fmt(-v)}` : "settled";
+      return `<tr><td>${esc(p.name)}</td><td class="num ${cls}">${label}</td></tr>`; }).join("") + `</tbody></table>`
+    : `<div class="empty">Add people to see balances.</div>`;
+
+  const tx = minimizeTransactions(net), naive = naiveCount(state.expenses);
+  const total = state.expenses.reduce((s,e)=>s+e.amount,0);
+  $("stats").innerHTML =
+    `<div class="stat"><b>${fmt(total)}</b><span>Total spent</span></div>
+     <div class="stat"><b>${tx.length}</b><span>Payments needed</span></div>
+     <div class="stat"><b>${naive}</b><span>Without optimizing</span></div>`;
+  $("settleList").innerHTML = tx.length ? tx.map(t =>
+    `<li><strong>${esc(nameOf(t.from))}</strong> pays <strong>${esc(nameOf(t.to))}</strong><span class="amt">${fmt(t.amount)}</span></li>`).join("")
+    : `<li style="background:transparent" class="empty">${state.expenses.length ? "Everyone is settled up 🎉" : "Nothing to settle yet."}</li>`;
+}
+
+/* ============ Events ============ */
+function showErr(msg){ const e=$("formErr"); e.textContent=msg; e.hidden=!msg; }
+
+function addPerson(){
+  const name = $("personName").value.trim();
+  if (!name) return;
+  if (state.people.some(p=>p.name.toLowerCase()===name.toLowerCase())) { alert("That name already exists."); return; }
+  state.people.push({id:uid(), name});
+  $("personName").value = ""; save(); render(); $("personName").focus();
+}
+$("addPerson").onclick = addPerson;
+$("personName").addEventListener("keydown", e => { if (e.key==="Enter") addPerson(); });
+
+document.addEventListener("click", e => {
+  const rm = e.target.dataset && e.target.dataset.rm, del = e.target.dataset && e.target.dataset.del;
+  if (rm){
+    if (state.expenses.some(x => x.payer===rm || (x.shares[rm]||0)>0)){ alert("This person is part of an expense. Delete those expenses first."); return; }
+    state.people = state.people.filter(p=>p.id!==rm); save(); render();
+  }
+  if (del){ state.expenses = state.expenses.filter(x=>x.id!==del); save(); render(); }
+});
+
+function setMode(m){
+  mode = m;
+  $("modeEqual").classList.toggle("on", m==="equal");
+  $("modeExact").classList.toggle("on", m==="exact");
+  $("splitEqual").hidden = m!=="equal"; $("splitExact").hidden = m!=="exact";
+}
+$("modeEqual").onclick = () => setMode("equal");
+$("modeExact").onclick = () => setMode("exact");
+
+$("addExpense").onclick = () => {
+  showErr("");
+  const desc = $("desc").value.trim() || "Expense";
+  const amount = toMinor($("amount").value);
+  const payer = $("payer").value;
+  if (state.people.length < 2) return showErr("Add at least two people first.");
+  if (!(amount > 0)) return showErr("Enter an amount greater than 0.");
+  let shares = {};
+  if (mode === "equal"){
+    const ids = [...document.querySelectorAll("#shareChecks input:checked")].map(i=>i.value);
+    if (!ids.length) return showErr("Select at least one person to split with.");
+    shares = splitEqually(amount, ids);
+  } else {
+    let sum = 0;
+    document.querySelectorAll("#exactInputs input").forEach(i => {
+      const v = i.value ? toMinor(i.value) : 0;
+      if (v > 0){ shares[i.dataset.exact] = v; sum += v; }
+    });
+    if (sum !== amount) return showErr(`Shares add up to ${fmt(sum)} but the amount is ${fmt(amount)}.`);
+  }
+  state.expenses.push({id:uid(), desc, amount, payer, shares});
+  $("desc").value = ""; $("amount").value = "";
+  document.querySelectorAll("#exactInputs input").forEach(i=>i.value="");
+  save(); render();
+};
+
+$("loadDemo").onclick = () => {
+  const [a,b,c,d] = ["Asha","Ravi","Meera","Kabir"].map(name=>({id:uid(),name}));
+  const ids = [a,b,c,d].map(p=>p.id);
+  const mk = (desc,amt,payer,who) => ({id:uid(),desc,amount:toMinor(amt),payer:payer.id,shares:splitEqually(toMinor(amt),who.map(p=>p.id))});
+  state = { people:[a,b,c,d], expenses:[
+    mk("Hotel",8000,a,[a,b,c,d]), mk("Dinner",2400,b,[a,b,c]), mk("Cab",1200,c,[a,b,c,d]),
+    mk("Tickets",3000,d,[b,c,d]), mk("Snacks",600,a,[a,d]) ]};
+  save(); render();
+};
+$("resetAll").onclick = () => { if (confirm("Delete all people and expenses?")) { state = {people:[],expenses:[]}; save(); render(); } };
+
+if (typeof document !== "undefined" && !window.__TEST__){ load(); render(); }
+</script>
+</body>
+</html>
